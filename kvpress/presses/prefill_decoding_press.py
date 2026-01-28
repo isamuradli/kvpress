@@ -15,6 +15,13 @@ from kvpress.presses.decoding_press import DecodingPress
 
 logger = logging.getLogger(__name__)
 
+# Configure file handler for logging
+_file_handler = logging.FileHandler("prefill_decoding_press.log")
+_file_handler.setLevel(logging.DEBUG)
+_file_handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+logger.addHandler(_file_handler)
+logger.setLevel(logging.DEBUG)
+
 
 @dataclass
 class PrefillDecodingPress(BasePress):
@@ -70,11 +77,26 @@ class PrefillDecodingPress(BasePress):
         """
         hidden_states = kwargs["hidden_states"]
         q_len = hidden_states.shape[1]
+        layer_idx = module.layer_idx
+        cache_pos = kwargs["cache_position"][-1].item() if hasattr(kwargs["cache_position"][-1], 'item') else kwargs["cache_position"][-1]
+
+        # Get cache info
+        cache = kwargs.get("past_key_values")
+        cache_len = cache.get_seq_length(layer_idx) if cache else 0
 
         # Determine if we're in prefilling or decoding phase
-        if kwargs["cache_position"][-1] <= q_len and self.prefilling_press is not None:
+        is_prefill = cache_pos <= q_len
+        phase = "PREFILL" if is_prefill else "DECODE"
+
+        logger.debug(
+            f"[{phase}] Layer {layer_idx}: q_len={q_len}, cache_pos={cache_pos}, cache_len={cache_len}"
+        )
+
+        if is_prefill and self.prefilling_press is not None:
+            logger.debug(f"[{phase}] Layer {layer_idx}: Routing to {type(self.prefilling_press).__name__}")
             return self.prefilling_press.forward_hook(module, input, kwargs, output)
         elif self.decoding_press is not None:
+            logger.debug(f"[{phase}] Layer {layer_idx}: Routing to {type(self.decoding_press).__name__}")
             return self.decoding_press.forward_hook(module, input, kwargs, output)
 
         # No hook applied
