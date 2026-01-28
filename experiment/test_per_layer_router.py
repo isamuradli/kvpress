@@ -24,6 +24,62 @@ logging.getLogger('kvpress.presses.per_layer_press_router').setLevel(logging.DEB
 logging.getLogger('kvpress.presses.prefill_decoding_press').setLevel(logging.DEBUG)
 
 
+def print_tokenization(tokenizer, input_ids, max_tokens=None, columns=4):
+    """Print token-by-token table showing index, token ID, and decoded string.
+
+    Args:
+        tokenizer: The tokenizer to decode tokens
+        input_ids: Token IDs tensor
+        max_tokens: Optional limit on tokens to display
+        columns: Number of columns to display (default: 2)
+    """
+    tokens = input_ids[0] if input_ids.dim() > 1 else input_ids
+    total = len(tokens)
+    display_count = min(total, max_tokens) if max_tokens else total
+
+    print(f"\n    Total tokens: {total}")
+
+    # Build token data
+    token_data = []
+    for i in range(display_count):
+        token_id = tokens[i].item()
+        token_str = tokenizer.decode([token_id])
+        token_repr = repr(token_str)
+        # Truncate long token strings
+        if len(token_repr) > 18:
+            token_repr = token_repr[:15] + "..."
+        token_data.append((i, token_id, token_repr))
+
+    # Calculate rows needed
+    rows = (display_count + columns - 1) // columns
+
+    # Print header
+    col_fmt = "{:>5} | {:>8} | {:<18}"
+    header = col_fmt.format("Idx", "TokenID", "Token")
+    separator = "-" * 5 + "-+-" + "-" * 8 + "-+-" + "-" * 18
+
+    full_header = "    " + ("  ||  ".join([header] * columns))
+    full_separator = "    " + ("  ||  ".join([separator] * columns))
+
+    print(full_header)
+    print(full_separator)
+
+    # Print rows with multiple columns
+    for row in range(rows):
+        row_parts = []
+        for col in range(columns):
+            idx = row + col * rows
+            if idx < display_count:
+                i, token_id, token_repr = token_data[idx]
+                row_parts.append(col_fmt.format(i, token_id, token_repr))
+            else:
+                row_parts.append(" " * 36)  # Empty column
+        print("    " + "  ||  ".join(row_parts))
+
+    if max_tokens and total > max_tokens:
+        print(f"\n    ... ({total - max_tokens} more tokens)")
+
+
 def test_per_layer_router(
     model_name: str = "Qwen/Qwen2.5-14B-Instruct",
     device: str = "cuda:0",
@@ -117,6 +173,12 @@ def test_per_layer_router(
     input_length = inputs["input_ids"].shape[1]
 
     print(f"    Input length: {input_length} tokens")
+
+    # -------------------------------------------------------------------------
+    # Step 5b: Print Tokenization
+    # -------------------------------------------------------------------------
+    print("\n[5b] Tokenization breakdown:")
+    print_tokenization(tokenizer, inputs["input_ids"])
 
     # -------------------------------------------------------------------------
     # Step 6: Run Inference

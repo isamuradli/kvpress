@@ -3,7 +3,7 @@
 
 import logging
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 import torch
@@ -43,6 +43,11 @@ class PrefillDecodingPress(BasePress):
     prefilling_press: Optional[BasePress] = None
     decoding_press: Optional[DecodingPress] = None
 
+    # Logging state tracking (not part of the public API)
+    _first_decode_logged: bool = field(default=False, init=False, repr=False)
+    _last_decode_cache_pos: int = field(default=-1, init=False, repr=False)
+    _last_decode_logs: list = field(default_factory=list, init=False, repr=False)
+
     def post_init_from_model(self, model):
         if self.prefilling_press is not None:
             self.prefilling_press.post_init_from_model(model)
@@ -80,34 +85,73 @@ class PrefillDecodingPress(BasePress):
         layer_idx = module.layer_idx
         cache_pos = kwargs["cache_position"][-1].item() if hasattr(kwargs["cache_position"][-1], 'item') else kwargs["cache_position"][-1]
 
-        # Get cache info
+        # Get cache info (before compression)
         cache = kwargs.get("past_key_values")
-        cache_len = cache.get_seq_length(layer_idx) if cache else 0
+        cache_len_before = cache.get_seq_length(layer_idx) if cache else 0
 
         # Determine if we're in prefilling or decoding phase
         is_prefill = cache_pos <= q_len
         phase = "PREFILL" if is_prefill else "DECODE"
 
-        logger.debug(
-            f"[{phase}] Layer {layer_idx}: q_len={q_len}, cache_pos={cache_pos}, cache_len={cache_len}"
-        )
-
         if is_prefill and self.prefilling_press is not None:
-            logger.debug(f"[{phase}] Layer {layer_idx}: Routing to {type(self.prefilling_press).__name__}")
-            return self.prefilling_press.forward_hook(module, input, kwargs, output)
+            press_name = type(self.prefilling_press).__name__
+            result = self.prefilling_press.forward_hook(module, input, kwargs, output)
+            cache_len_after = cache.get_seq_length(layer_idx) if cache else 0
+            logger.debug(
+                f"[{phase}] Layer {layer_idx}: {press_name}, q_len={q_len}, cache_pos={cache_pos}, "
+                f"cache_len={cache_len_before} -> {cache_len_after}"
+            )
+            return result
         elif self.decoding_press is not None:
-            logger.debug(f"[{phase}] Layer {layer_idx}: Routing to {type(self.decoding_press).__name__}")
-            return self.decoding_press.forward_hook(module, input, kwargs, output)
+            press_name = type(self.decoding_press).__name__
+            result = self.decoding_press.forward_hook(module, input, kwargs, output)
+            cache_len_after = cache.get_seq_length(layer_idx) if cache else 0
+
+            log_msg = (
+                f"[{phase}] Layer {layer_idx}: {press_name}, q_len={q_len}, cache_pos={cache_pos}, "
+                f"cache_len={cache_len_before} -> {cache_len_after}"
+            )
+
+            # Only log first decode token, store last for final logging
+            if not self._first_decode_logged:
+                logger.debug(log_msg)
+                # Mark first decode as logged after all layers complete
+                if layer_idx == 47 or cache_pos > self._last_decode_cache_pos:
+                    self._first_decode_logged = True
+
+            # Track last decode state (overwrite each token)
+            if cache_pos > self._last_decode_cache_pos:
+                self._last_decode_cache_pos = cache_pos
+                self._last_decode_logs = [log_msg]
+            elif cache_pos == self._last_decode_cache_pos:
+                self._last_decode_logs.append(log_msg)
+
+            return result
 
         # No hook applied
+        logger.debug(
+            f"[{phase}] Layer {layer_idx}: no press, q_len={q_len}, cache_pos={cache_pos}, "
+            f"cache_len={cache_len_before}"
+        )
         return output
 
     @contextmanager
     def __call__(self, model: PreTrainedModel):
+        # Reset logging state
+        self._first_decode_logged = False
+        self._last_decode_cache_pos = -1
+        self._last_decode_logs = []
+
         try:
             with super().__call__(model):
                 yield
         finally:
+            # Log last decode token state
+            if self._last_decode_logs:
+                logger.debug("[DECODE] ... (intermediate tokens omitted) ...")
+                for log_msg in self._last_decode_logs:
+                    logger.debug(log_msg.replace("[DECODE]", "[DECODE FINAL]"))
+
             # Reset decoding press if it exists
             if self.decoding_press is not None:
                 self.decoding_press.reset()
