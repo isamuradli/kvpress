@@ -1,0 +1,111 @@
+{
+  "config": {
+    "model": "Qwen/Qwen2.5-1.5B-Instruct",
+    "compression_ratio": 0.5,
+    "input_tokens": 286,
+    "question": "How old is the author?",
+    "expected_answer": "32"
+  },
+  "results": [
+    {
+      "press_name": "KnormPress",
+      "compression_ratio": 0.5,
+      "input_tokens": 286,
+      "cache_size_after_prefill": 143,
+      "actual_compression": 0.5,
+      "generation_time_ms": 1562.96,
+      "generated_text": "The author of this text is Alice is Alice. Alice is 30 years old. Alice is Alice. Alice is is 30 years old. Alice is Alice. Alice is Alice. Alice is Alice. Alice is Alice. Alice is Alice",
+      "answer_correct": false
+    },
+    {
+      "press_name": "SnapKVPress",
+      "compression_ratio": 0.5,
+      "input_tokens": 286,
+      "cache_size_after_prefill": 143,
+      "actual_compression": 0.5,
+      "generation_time_ms": 1044.51,
+      "generated_text": "The author of the document is Alice, not Alice. The document is written in the first person, and the text is written in the first person, so the author is Alice. Alice is 32 years old.",
+      "answer_correct": true
+    },
+    {
+      "press_name": "StreamingLLMPress",
+      "compression_ratio": 0.5,
+      "input_tokens": 286,
+      "cache_size_after_prefill": 143,
+      "actual_compression": 0.5,
+      "generation_time_ms": 1104.7,
+      "generated_text": "The author of the document is is is Alice, who is 3 the field in the next 30 years that a machine would intelligent as a a human being would be developed by the 30 years. Alice Alice is the document is a",
+      "answer_correct": false
+    },
+    {
+      "press_name": "RandomPress",
+      "compression_ratio": 0.5,
+      "input_tokens": 286,
+      "cache_size_after_prefill": 143,
+      "actual_compression": 0.5,
+      "generation_time_ms": 1091.56,
+      "generated_text": "The year 1956. The workshop was a significant milestone in the history of AI. The year 1956 was the old as the year 1956. The year 1956. The year Alice",
+      "answer_correct": false
+    },
+    {
+      "press_name": "TOVAPress",
+      "compression_ratio": 0.5,
+      "input_tokens": 286,
+      "cache_size_after_prefill": 143,
+      "actual_compression": 0.5,
+      "generation_time_ms": 415.31,
+      "generated_text": "The author of the document is Alice, and she is 32 years old.",
+      "answer_correct": true
+    },
+    {
+      "press_name": "ExpectedAttentionPress",
+      "compression_ratio": 0.5,
+      "input_tokens": 286,
+      "cache_size_after_prefill": 143,
+      "actual_compression": 0.5,
+      "generation_time_ms": 1119.4,
+      "generated_text": "The field of AI has seen significant advancements since then, with the development of deep learning and natural language processing. The field has also faced criticism and skepticism, with some arguing that AI has not yet achieved the level of intelligence of a human.",
+      "answer_correct": false
+    },
+    {
+      "press_name": "PyramidKVPress",
+      "compression_ratio": 0.5,
+      "input_tokens": 286,
+      "cache_size_after_prefill": 279,
+      "actual_compression": 0.024,
+      "generation_time_ms": 457.3,
+      "generated_text": "The author?user\nThe author, named Alice, is 32 years old.",
+      "answer_correct": true
+    },
+    {
+      "press_name": "KeyDiffPress",
+      "compression_ratio": 0.5,
+      "input_tokens": 286,
+      "cache_size_after_prefill": 143,
+      "actual_compression": 0.5,
+      "generation_time_ms": 410.81,
+      "generated_text": "The author of the text is Alice, who is 32 years old.",
+      "answer_correct": true
+    },
+    {
+      "press_name": "AdaKV_SnapKV",
+      "compression_ratio": 0.5,
+      "input_tokens": 286,
+      "cache_size_after_prefill": 286,
+      "actual_compression": 0.0,
+      "generation_time_ms": 1504.93,
+      "generated_text": "The!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+      "answer_correct": false
+    },
+    {
+      "press_name": "CURPress",
+      "compression_ratio": 0.5,
+      "input_tokens": 286,
+      "cache_size_after_prefill": 143,
+      "actual_compression": 0.5,
+      "generation_time_ms": 761.68,
+      "generated_text": "The author of the book \"Artificial Intelligence\" is Marvin Minsky, John McCarthy, Claude Shannon, and Marvin Minsky, John McCarthy, and Claude Shannon.",
+      "answer_correct": false
+    }
+  ]
+}

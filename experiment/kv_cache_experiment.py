@@ -31,12 +31,13 @@ class LoggingPressWrapper(BasePress):
     """
 
     press: BasePress
-    log_every_n_layers: int = 1  # Log every N layers (1 = all layers)
+    log_every_n_layers: int = 4  # Log every N layers (1 = all layers)
     verbose: bool = True
 
     def __post_init__(self):
         self.layer_count = 0
         self.phase = "unknown"
+        self.prefill_first_layer_written = False
 
     def post_init_from_model(self, model):
         if self.press is not None:
@@ -136,6 +137,7 @@ def run_experiment(
     prefill_compression_ratio: float = 0.5,
     decode_target_size: int = 512,
     decode_compression_interval: int = 256,
+    no_decode_compression: bool = False,
     max_new_tokens: int = 100,
     log_every_n_layers: int = 4,  # Log every 4 layers to reduce output
 ):
@@ -154,6 +156,8 @@ def run_experiment(
         Target cache size after decoding compression
     decode_compression_interval : int
         Compress every N generated tokens
+    no_decode_compression : bool
+        If True, disable compression during decode phase
     max_new_tokens : int
         Maximum tokens to generate
     log_every_n_layers : int
@@ -166,8 +170,10 @@ def run_experiment(
     print(f"\nModel: {model_name}")
     print(f"Device: {device}")
     print(f"Prefill compression ratio: {prefill_compression_ratio}")
-    print(f"Decode target size: {decode_target_size}")
-    print(f"Decode compression interval: {decode_compression_interval}")
+    print(f"Decode compression: {'disabled' if no_decode_compression else 'enabled'}")
+    if not no_decode_compression:
+        print(f"Decode target size: {decode_target_size}")
+        print(f"Decode compression interval: {decode_compression_interval}")
     print(f"Max new tokens: {max_new_tokens}")
     print()
 
@@ -209,11 +215,7 @@ def run_experiment(
     a human being would exist in no more than a generation, and they were given millions
     of dollars to make this vision come true. Also note that the author is a PhD student in Computer Science.
 
-    Eventually, it became obvious that commercial developers and researchers had
-    grossly underestimated the difficulty of the project. In 1974, in response to the
-    criticism from James Lighthill and ongoing pressure from congress, the U.S. and
-    British Governments stopped funding undirected research into artificial intelligence,
-    and the difficult years that followed would later be known as an "AI winter".
+    My name is Isa and I'm 26 years old.
 
     In the early 1980s, AI research was revived by the commercial success of expert
     systems, a form of AI program that simulated the knowledge and analytical skills
@@ -222,7 +224,7 @@ def run_experiment(
     British governments to restore funding for academic research.
     """
 
-    question = "What is the name of the author mentioned in the context and what does he study?"
+    question = "How old is the author ?"
 
     # Apply chat template
     messages = [
@@ -249,14 +251,17 @@ def run_experiment(
         verbose=True
     )
 
-    # Decoding press with logging
-    decoding_press = LoggingDecodingPress(
-        base_press=KnormPress(),
-        compression_interval=decode_compression_interval,
-        target_size=decode_target_size,
-        hidden_states_buffer_size=128,
-        verbose=True
-    )
+    # Decoding press with logging (optional)
+    if no_decode_compression:
+        decoding_press = None
+    else:
+        decoding_press = LoggingDecodingPress(
+            base_press=KnormPress(),
+            compression_interval=decode_compression_interval,
+            target_size=decode_target_size,
+            hidden_states_buffer_size=128,
+            verbose=True
+        )
 
     # Combined press
     combined_press = PrefillDecodingPress(
@@ -265,7 +270,10 @@ def run_experiment(
     )
 
     print(f"  Prefill press: KnormPress(compression_ratio={prefill_compression_ratio})")
-    print(f"  Decode press: DecodingPress(interval={decode_compression_interval}, target={decode_target_size})")
+    if no_decode_compression:
+        print(f"  Decode press: None (disabled)")
+    else:
+        print(f"  Decode press: DecodingPress(interval={decode_compression_interval}, target={decode_target_size})")
     print()
 
     # -------------------------------------------------------------------------
@@ -438,7 +446,9 @@ if __name__ == "__main__":
                         help="Decode target cache size")
     parser.add_argument("--decode-interval", type=int, default=256,
                         help="Decode compression interval")
-    parser.add_argument("--max-tokens", type=int, default=1000,
+    parser.add_argument("--no-decode-compression", action="store_true",
+                        help="Disable decode phase compression")
+    parser.add_argument("--max-tokens", type=int, default=100,
                         help="Max new tokens to generate")
     parser.add_argument("--log-layers", type=int, default=4,
                         help="Log every N layers")
@@ -459,6 +469,7 @@ if __name__ == "__main__":
             prefill_compression_ratio=args.prefill_ratio,
             decode_target_size=args.decode_target,
             decode_compression_interval=args.decode_interval,
+            no_decode_compression=args.no_decode_compression,
             max_new_tokens=args.max_tokens,
             log_every_n_layers=args.log_layers,
         )
