@@ -24,6 +24,91 @@ logging.getLogger('kvpress.presses.per_layer_press_router').setLevel(logging.DEB
 logging.getLogger('kvpress.presses.prefill_decoding_press').setLevel(logging.DEBUG)
 
 
+def save_kv_cache(cache, layer_idx, filepath, tokenizer=None, input_ids=None):
+    """Save KV cache from a specific layer to a file for later analysis.
+
+    Args:
+        cache: The DynamicCache object
+        layer_idx: Layer index to extract
+        filepath: Path to save the cache (will save as .pt file)
+        tokenizer: Optional tokenizer for saving token metadata
+        input_ids: Optional input token IDs for saving token metadata
+
+    Saves a dict with:
+        - keys: Key tensor of shape (batch, num_kv_heads, seq_len, head_dim)
+        - values: Value tensor of shape (batch, num_kv_heads, seq_len, head_dim)
+        - metadata: Dict with layer_idx, shapes, dtype, etc.
+        - tokens: Optional dict with token_ids and decoded strings
+    """
+    import os
+    from datetime import datetime
+
+    # Extract keys and values from cache layer
+    # DynamicCache uses cache.layers[layer_idx].keys/values
+    keys = cache.layers[layer_idx].keys.cpu()
+    values = cache.layers[layer_idx].values.cpu()
+
+    # Build metadata
+    metadata = {
+        "layer_idx": layer_idx,
+        "keys_shape": list(keys.shape),
+        "values_shape": list(values.shape),
+        "dtype": str(keys.dtype),
+        "seq_length": keys.shape[2],
+        "num_kv_heads": keys.shape[1],
+        "head_dim": keys.shape[3],
+        "saved_at": datetime.now().isoformat(),
+    }
+
+    save_dict = {
+        "keys": keys,
+        "values": values,
+        "metadata": metadata,
+    }
+
+    # Optionally save token information
+    if tokenizer is not None and input_ids is not None:
+        tokens = input_ids[0] if input_ids.dim() > 1 else input_ids
+        token_ids = tokens.cpu().tolist()
+        token_strings = [tokenizer.decode([tid]) for tid in token_ids]
+        save_dict["tokens"] = {
+            "token_ids": token_ids,
+            "token_strings": token_strings,
+        }
+        metadata["original_seq_length"] = len(token_ids)
+
+    # Save to file
+    torch.save(save_dict, filepath)
+
+    print(f"    Saved KV cache layer {layer_idx} to: {filepath}")
+    print(f"      Keys shape: {list(keys.shape)}")
+    print(f"      Values shape: {list(values.shape)}")
+    print(f"      Dtype: {keys.dtype}")
+    print(f"      Seq length (after compression): {keys.shape[2]}")
+
+    return filepath
+
+
+def load_kv_cache(filepath):
+    """Load a saved KV cache file.
+
+    Args:
+        filepath: Path to the saved .pt file
+
+    Returns:
+        Dict with keys, values, metadata, and optionally tokens
+    """
+    data = torch.load(filepath, weights_only=False)
+    print(f"    Loaded KV cache from: {filepath}")
+    print(f"      Keys shape: {data['metadata']['keys_shape']}")
+    print(f"      Values shape: {data['metadata']['values_shape']}")
+    print(f"      Layer: {data['metadata']['layer_idx']}")
+    print(f"      Seq length: {data['metadata']['seq_length']}")
+    if "tokens" in data:
+        print(f"      Original tokens: {data['metadata'].get('original_seq_length', 'N/A')}")
+    return data
+
+
 def print_tokenization(tokenizer, input_ids, max_tokens=None, columns=4):
     """Print token-by-token table showing index, token ID, and decoded string.
 
@@ -205,6 +290,19 @@ def test_per_layer_router(
             layer_size = cache.get_seq_length(layer_idx)
             press_type = "KnormPress" if layer_idx < mid_layer else "RandomPress"
             print(f"      Layer {layer_idx:2d} ({press_type}): {layer_size} tokens")
+
+        # -------------------------------------------------------------------------
+        # Step 6b: Save KV Cache from Layer 0
+        # -------------------------------------------------------------------------
+        print("\n[6b] Saving KV cache from layer 0 (prefill stage)...")
+        kv_cache_path = "kv_cache_layer0_prefill.pt"
+        save_kv_cache(
+            cache=cache,
+            layer_idx=0,
+            filepath=kv_cache_path,
+            tokenizer=tokenizer,
+            input_ids=inputs["input_ids"],
+        )
 
         # Generate a few tokens
         generated_ids = []
